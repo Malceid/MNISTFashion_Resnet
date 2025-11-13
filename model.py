@@ -35,21 +35,22 @@ class ResidualBlock(nn.Module):
         return out
 
 class ImageCNN(nn.Module):
-    def __init__(self, num_classes=10):
+    def __init__(self, input_shape=1, num_classes=2):
         super().__init__()
         self.conv1 = nn.Sequential(
-            nn.Conv2d(1, 64, 7, stride=2, padding=3, bias=False), nn.BatchNorm2d(64), nn.ReLU(inplace=True), nn.MaxPool2d(3, stride = 2, padding=1))
+            nn.Conv2d(input_shape, 64, 7, stride=2, padding=3, bias=False), nn.BatchNorm2d(64), nn.ReLU(inplace=True), nn.MaxPool2d(3, stride = 2, padding=1))
         self.layer1 = nn.ModuleList(
             [ResidualBlock(64, 64) for i in range(3)])
         self.layer2 = nn.ModuleList(
             [ResidualBlock(64 if i == 0 else 128, 128, stride=2 if i == 0 else 1) for i in range(4)])
         self.layer3 = nn.ModuleList(
-            [ResidualBlock(128 if i == 0 else 256 ,256, stride=2 if i == 0 else 1) for i in range(6)])
-        
+            [ResidualBlock(128 if i == 0 else 256, 256, stride=2 if i == 0 else 1) for i in range(6)])
+        self.layer4 = nn.ModuleList(
+            [ResidualBlock(256 if i == 0 else 512, 512, stride=2 if i == 0 else 1) for i in range(3)])        
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.dropout = nn.Dropout(0.5)
-        self.fc = nn.Linear(256, num_classes)
+        self.dropout = nn.Dropout(0.3)
+        self.fc = nn.Linear(512, num_classes)
 
     def forward(self, x, return_feature_maps=False):
         if not return_feature_maps:
@@ -59,6 +60,8 @@ class ImageCNN(nn.Module):
             for block in self.layer2:
                 x = block(x)
             for block in self.layer3:
+                x = block(x)
+            for block in self.layer4:
                 x = block(x)
             x = self.avgpool(x)
             x = x.view(x.size(0), -1)
@@ -80,7 +83,11 @@ class ImageCNN(nn.Module):
 
             for i, block in enumerate(self.layer3):
                 x = block(x, feature_maps, prefix=f"layer3.block{i}")
-            feature_maps["layer3"] = x
+            feature_maps["layer3"] = x            
+
+            for i, block in enumerate(self.layer4):
+                x = block(x, feature_maps, prefix=f"layer4.block{i}")
+            feature_maps["layer4"] = x
 
             x = self.avgpool(x)
             x = x.view(x.size(0), -1)
